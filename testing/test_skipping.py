@@ -73,7 +73,7 @@ class TestEvaluation:
             """@pytest.mark.skipif("not hasattr(os, 'murks')")""",
             """@pytest.mark.skipif(condition="hasattr(os, 'murks')")""",
         ]
-        for i in range(0, 2):
+        for i in range(2):
             item = pytester.getitem(
                 """
                 import pytest

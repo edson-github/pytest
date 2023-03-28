@@ -29,7 +29,7 @@ class CommonFSTests:
         assert strp.startswith(str(path1))
 
     def test_join_normalized(self, path1):
-        newpath = path1.join(path1.sep + "sampledir")
+        newpath = path1.join(f"{path1.sep}sampledir")
         strp = str(newpath)
         assert strp.endswith("sampledir")
         assert strp.startswith(str(path1))
@@ -44,7 +44,7 @@ class CommonFSTests:
 
     def test_add_something(self, path1):
         p = path1.join("sample")
-        p = p + "dir"
+        p = f"{p}dir"
         assert p.check()
         assert p.exists()
         assert p.isdir()
@@ -142,10 +142,10 @@ class CommonFSTests:
         s = curdir.bestrelpath(curdir)
         assert s == "."
         s = curdir.bestrelpath(curdir.join("hello", "world"))
-        assert s == "hello" + sep + "world"
+        assert s == f"hello{sep}world"
 
         s = curdir.bestrelpath(curdir.dirpath().join("sister"))
-        assert s == ".." + sep + "sister"
+        assert s == f"..{sep}sister"
         assert curdir.bestrelpath(curdir.dirpath()) == ".."
 
         assert curdir.bestrelpath("hello") == "hello"
@@ -171,7 +171,7 @@ class CommonFSTests:
     def test_listdir_filter(self, path1):
         p = path1.listdir(lambda x: x.check(dir=1))
         assert path1.join("sampledir") in p
-        assert not path1.join("samplefile") in p
+        assert path1.join("samplefile") not in p
 
     def test_listdir_sorted(self, path1):
         p = path1.listdir(lambda x: x.check(basestarts="sample"), sort=True)
@@ -180,39 +180,34 @@ class CommonFSTests:
         assert path1.join("samplepickle") == p[2]
 
     def test_visit_nofilter(self, path1):
-        lst = []
-        for i in path1.visit():
-            lst.append(i.relto(path1))
+        lst = [i.relto(path1) for i in path1.visit()]
         assert "sampledir" in lst
         assert path1.sep.join(["sampledir", "otherfile"]) in lst
 
     def test_visit_norecurse(self, path1):
-        lst = []
-        for i in path1.visit(None, lambda x: x.basename != "sampledir"):
-            lst.append(i.relto(path1))
+        lst = [
+            i.relto(path1)
+            for i in path1.visit(None, lambda x: x.basename != "sampledir")
+        ]
         assert "sampledir" in lst
-        assert not path1.sep.join(["sampledir", "otherfile"]) in lst
+        assert path1.sep.join(["sampledir", "otherfile"]) not in lst
 
     @pytest.mark.parametrize(
         "fil",
         ["*dir", "*dir", pytest.mark.skip("sys.version_info <" " (3,6)")(b"*dir")],
     )
     def test_visit_filterfunc_is_string(self, path1, fil):
-        lst = []
-        for i in path1.visit(fil):
-            lst.append(i.relto(path1))
+        lst = [i.relto(path1) for i in path1.visit(fil)]
         assert len(lst), 2
         assert "sampledir" in lst
         assert "otherdir" in lst
 
     def test_visit_ignore(self, path1):
         p = path1.join("nonexisting")
-        assert list(p.visit(ignore=error.ENOENT)) == []
+        assert not list(p.visit(ignore=error.ENOENT))
 
     def test_visit_endswith(self, path1):
-        p = []
-        for i in path1.visit(lambda x: x.check(endswith="file")):
-            p.append(i.relto(path1))
+        p = [i.relto(path1) for i in path1.visit(lambda x: x.check(endswith="file"))]
         assert path1.sep.join(["sampledir", "otherfile"]) in p
         assert "samplefile" in p
 
@@ -311,24 +306,18 @@ class CommonFSTests:
         assert obj.get("answer", None) == 42
 
     def test_visit_filesonly(self, path1):
-        p = []
-        for i in path1.visit(lambda x: x.check(file=1)):
-            p.append(i.relto(path1))
+        p = [i.relto(path1) for i in path1.visit(lambda x: x.check(file=1))]
         assert "sampledir" not in p
         assert path1.sep.join(["sampledir", "otherfile"]) in p
 
     def test_visit_nodotfiles(self, path1):
-        p = []
-        for i in path1.visit(lambda x: x.check(dotfile=0)):
-            p.append(i.relto(path1))
+        p = [i.relto(path1) for i in path1.visit(lambda x: x.check(dotfile=0))]
         assert "sampledir" in p
         assert path1.sep.join(["sampledir", "otherfile"]) in p
         assert ".dotfile" not in p
 
     def test_visit_breadthfirst(self, path1):
-        lst = []
-        for i in path1.visit(bf=True):
-            lst.append(i.relto(path1))
+        lst = [i.relto(path1) for i in path1.visit(bf=True)]
         for i, p in enumerate(lst):
             if path1.sep in p:
                 for j in range(i, len(lst)):
@@ -534,7 +523,7 @@ def batch_make_numbered_dirs(rootdir, repeats):
     for i in range(repeats):
         dir_ = local.make_numbered_dir(prefix="repro-", rootdir=rootdir)
         file_ = dir_.join("foo")
-        file_.write("%s" % i)
+        file_.write(f"{i}")
         actual = int(file_.read())
         assert actual == i, f"int(file_.read()) is {actual} instead of {i}"
         dir_.join(".lock").remove(ignore_errors=True)
@@ -544,9 +533,9 @@ def batch_make_numbered_dirs(rootdir, repeats):
 class TestLocalPath(CommonFSTests):
     def test_join_normpath(self, tmpdir):
         assert tmpdir.join(".") == tmpdir
-        p = tmpdir.join("../%s" % tmpdir.basename)
+        p = tmpdir.join(f"../{tmpdir.basename}")
         assert p == tmpdir
-        p = tmpdir.join("..//%s/" % tmpdir.basename)
+        p = tmpdir.join(f"..//{tmpdir.basename}/")
         assert p == tmpdir
 
     @skiponwin32
@@ -703,7 +692,7 @@ class TestLocalPath(CommonFSTests):
 
     @pytest.mark.parametrize("bin", (False, True))
     def test_dump(self, tmpdir, bin):
-        path = tmpdir.join("dumpfile%s" % int(bin))
+        path = tmpdir.join(f"dumpfile{int(bin)}")
         try:
             d = {"answer": 42}
             path.dump(d, bin=bin)
@@ -834,7 +823,7 @@ class TestLocalPath(CommonFSTests):
         assert b.fnmatch(pattern)
 
     def test_sysfind(self):
-        name = sys.platform == "win32" and "cmd" or "test"
+        name = "cmd" if sys.platform == "win32" else "test"
         x = local.sysfind(name)
         assert x.check(file=1)
         assert local.sysfind("jaksdkasldqwe") is None
@@ -894,7 +883,7 @@ class TestExecution:
 
     def test_sysfind_multiple(self, tmpdir, monkeypatch):
         monkeypatch.setenv(
-            "PATH", "{}:{}".format(tmpdir.ensure("a"), tmpdir.join("b")), prepend=":"
+            "PATH", f'{tmpdir.ensure("a")}:{tmpdir.join("b")}', prepend=":"
         )
         tmpdir.ensure("b", "a")
         x = local.sysfind("a", checker=lambda x: x.dirpath().basename == "b")
@@ -1062,7 +1051,7 @@ class TestImport:
     def test_pyimport_check_filepath_consistency(self, monkeypatch, tmpdir):
         name = "pointsback123"
         ModuleType = type(os)
-        p = tmpdir.ensure(name + ".py")
+        p = tmpdir.ensure(f"{name}.py")
         for ending in (".pyc", "$py.class", ".pyo"):
             mod = ModuleType(name)
             pseudopath = tmpdir.ensure(name + ending)
@@ -1072,7 +1061,7 @@ class TestImport:
             assert mod == newmod
         monkeypatch.undo()
         mod = ModuleType(name)
-        pseudopath = tmpdir.ensure(name + "123.py")
+        pseudopath = tmpdir.ensure(f"{name}123.py")
         mod.__file__ = str(pseudopath)
         monkeypatch.setitem(sys.modules, name, mod)
         excinfo = pytest.raises(pseudopath.ImportMismatchError, p.pyimport)
@@ -1402,7 +1391,7 @@ class TestPOSIXLocalPath:
         # XXX This is here in local until we find a way to implement this
         #     using the subversion command line api.
         p1 = path1.join("something")
-        p2 = local(path1.sep + "blabla")
+        p2 = local(f"{path1.sep}blabla")
         assert p1.common(p2) == "/"
 
     def test_join_to_root(self, path1):

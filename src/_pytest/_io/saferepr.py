@@ -31,7 +31,7 @@ def _ellipsize(s: str, maxsize: int) -> str:
     if len(s) > maxsize:
         i = max(0, (maxsize - 3) // 2)
         j = max(0, maxsize - 3 - i)
-        return s[:i] + "..." + s[len(s) - j :]
+        return f"{s[:i]}...{s[len(s) - j:]}"
     return s
 
 
@@ -58,11 +58,7 @@ class SafeRepr(reprlib.Repr):
 
     def repr(self, x: object) -> str:
         try:
-            if self.use_ascii:
-                s = ascii(x)
-            else:
-                s = super().repr(x)
-
+            s = ascii(x) if self.use_ascii else super().repr(x)
         except (KeyboardInterrupt, SystemExit):
             raise
         except BaseException as exc:
@@ -127,9 +123,7 @@ def saferepr_unlimited(obj: object, use_ascii: bool = True) -> str:
     when maxsize=None, but that might affect some other code.
     """
     try:
-        if use_ascii:
-            return ascii(obj)
-        return repr(obj)
+        return ascii(obj) if use_ascii else repr(obj)
     except Exception as exc:
         return _format_repr_exception(exc, obj)
 

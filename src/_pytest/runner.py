@@ -77,16 +77,14 @@ def pytest_terminal_summary(terminalreporter: "TerminalReporter") -> None:
     tr = terminalreporter
     dlist = []
     for replist in tr.stats.values():
-        for rep in replist:
-            if hasattr(rep, "duration"):
-                dlist.append(rep)
+        dlist.extend(rep for rep in replist if hasattr(rep, "duration"))
     if not dlist:
         return
     dlist.sort(key=lambda x: x.duration, reverse=True)  # type: ignore[no-any-return]
     if not durations:
         tr.write_sep("=", "slowest durations")
     else:
-        tr.write_sep("=", "slowest %s durations" % durations)
+        tr.write_sep("=", f"slowest {durations} durations")
         dlist = dlist[:durations]
 
     for i, rep in enumerate(dlist):
@@ -146,9 +144,8 @@ def show_test_item(item: Item) -> None:
     tw.line()
     tw.write(" " * 8)
     tw.write(item.nodeid)
-    used_fixtures = sorted(getattr(item, "fixturenames", []))
-    if used_fixtures:
-        tw.write(" (fixtures used: {})".format(", ".join(used_fixtures)))
+    if used_fixtures := sorted(getattr(item, "fixturenames", [])):
+        tw.write(f' (fixtures used: {", ".join(used_fixtures)})')
     tw.flush()
 
 
@@ -238,10 +235,7 @@ def check_interactive_exception(call: "CallInfo[object]", report: BaseReport) ->
     if hasattr(report, "wasxfail"):
         # Exception was expected.
         return False
-    if isinstance(call.excinfo.value, (Skipped, bdb.BdbQuit)):
-        # Special control flow exception.
-        return False
-    return True
+    return not isinstance(call.excinfo.value, (Skipped, bdb.BdbQuit))
 
 
 def call_runtest_hook(
@@ -393,7 +387,7 @@ def pytest_make_collect_report(collector: Collector) -> CollectReport:
                 assert isinstance(errorinfo, str)
                 errorinfo = CollectErrorRepr(errorinfo)
             longrepr = errorinfo
-    result = call.result if not call.excinfo else None
+    result = None if call.excinfo else call.result
     rep = CollectReport(collector.nodeid, outcome, longrepr, result)
     rep.call = call  # type: ignore # see collect_one_node
     return rep
@@ -515,9 +509,10 @@ class SetupState:
         """
         needed_collectors = nextitem and nextitem.listchain() or []
         exceptions: List[BaseException] = []
-        while self.stack:
-            if list(self.stack.keys()) == needed_collectors[: len(self.stack)]:
-                break
+        while (
+            self.stack
+            and list(self.stack.keys()) != needed_collectors[: len(self.stack)]
+        ):
             node, (finalizers, _) = self.stack.popitem()
             these_exceptions = []
             while finalizers:

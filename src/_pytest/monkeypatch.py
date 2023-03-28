@@ -62,7 +62,7 @@ def resolve(name: str) -> object:
     used = parts.pop(0)
     found: object = __import__(used)
     for part in parts:
-        used += "." + part
+        used += f".{part}"
         try:
             found = getattr(found, part)
         except AttributeError:
@@ -234,13 +234,12 @@ class MonkeyPatch:
                 )
             value = name
             name, target = derive_importpath(target, raising)
-        else:
-            if not isinstance(name, str):
-                raise TypeError(
-                    "use setattr(target, name, value) with name being a string or "
-                    "setattr(target, value) with target being a dotted "
-                    "import string"
-                )
+        elif not isinstance(name, str):
+            raise TypeError(
+                "use setattr(target, name, value) with name being a string or "
+                "setattr(target, value) with target being a dotted "
+                "import string"
+            )
 
         oldval = getattr(target, name, notset)
         if raising and oldval is notset:
@@ -279,16 +278,16 @@ class MonkeyPatch:
                 )
             name, target = derive_importpath(target, raising)
 
-        if not hasattr(target, name):
-            if raising:
-                raise AttributeError(name)
-        else:
+        if hasattr(target, name):
             oldval = getattr(target, name, notset)
             # Avoid class descriptors like staticmethod/classmethod.
             if inspect.isclass(target):
                 oldval = target.__dict__.get(name, notset)
             self._setattr.append((target, name, oldval))
             delattr(target, name)
+
+        elif raising:
+            raise AttributeError(name)
 
     def setitem(self, dic: MutableMapping[K, V], name: K, value: V) -> None:
         """Set dictionary entry ``name`` to value."""
@@ -301,12 +300,12 @@ class MonkeyPatch:
         Raises ``KeyError`` if it doesn't exist, unless ``raising`` is set to
         False.
         """
-        if name not in dic:
-            if raising:
-                raise KeyError(name)
-        else:
+        if name in dic:
             self._setitem.append((dic, name, dic.get(name, notset)))
             del dic[name]
+
+        elif raising:
+            raise KeyError(name)
 
     def setenv(self, name: str, value: str, prepend: Optional[str] = None) -> None:
         """Set environment variable ``name`` to ``value``.
@@ -325,7 +324,7 @@ class MonkeyPatch:
                 ),
                 stacklevel=2,
             )
-            value = str(value)
+            value = value
         if prepend and name in os.environ:
             value = value + prepend + os.environ[name]
         self.setitem(os.environ, name, value)
