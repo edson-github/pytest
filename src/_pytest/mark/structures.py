@@ -370,10 +370,11 @@ def get_unpacked_marks(
     is false, only return marks applied directly to this class.
     """
     if isinstance(obj, type):
-        if not consider_mro:
-            mark_lists = [obj.__dict__.get("pytestmark", [])]
-        else:
-            mark_lists = [x.__dict__.get("pytestmark", []) for x in obj.__mro__]
+        mark_lists = (
+            [x.__dict__.get("pytestmark", []) for x in obj.__mro__]
+            if consider_mro
+            else [obj.__dict__.get("pytestmark", [])]
+        )
         mark_list = []
         for item in mark_lists:
             if isinstance(item, list):
@@ -540,7 +541,7 @@ class MarkGenerator:
                     )
 
                 # Raise a specific error for common misspellings of "parametrize".
-                if name in ["parameterize", "parametrise", "parameterise"]:
+                if name in {"parameterize", "parametrise", "parameterise"}:
                     __tracebackhide__ = True
                     fail(f"Unknown '{name}' mark, did you mean 'parametrize'?")
 
@@ -610,7 +611,7 @@ class NodeKeywords(MutableMapping[str, Any]):
 
     def __len__(self) -> int:
         # Doesn't need to be fast.
-        return sum(1 for keyword in self)
+        return sum(1 for _ in self)
 
     def __repr__(self) -> str:
         return f"<NodeKeywords for node {self.node}>"

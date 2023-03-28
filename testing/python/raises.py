@@ -54,7 +54,7 @@ class TestRaises:
             # this test prints the inflight uninitialized object
             # using repr and str as well as pprint to demonstrate
             # it works
-            print(str(excinfo))
+            print(excinfo)
             print(repr(excinfo))
             import pprint
 
@@ -198,7 +198,7 @@ class TestRaises:
             f" Regex: {msg!r}\n"
             " Input: \"invalid literal for int() with base 10: 'asdf'\""
         )
-        with pytest.raises(AssertionError, match="(?m)" + re.escape(expr)):
+        with pytest.raises(AssertionError, match=f"(?m){re.escape(expr)}"):
             with pytest.raises(ValueError, match=msg):
                 int("asdf", base=10)
 

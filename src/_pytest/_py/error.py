@@ -27,11 +27,7 @@ class Error(EnvironmentError):
         )
 
     def __str__(self) -> str:
-        s = "[{}]: {}".format(
-            self.__class__.__doc__,
-            " ".join(map(str, self.args)),
-        )
-        return s
+        return f'[{self.__class__.__doc__}]: {" ".join(map(str, self.args))}'
 
 
 _winerrnomap = {

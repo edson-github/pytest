@@ -48,7 +48,7 @@ class Checkers:
 
     def ext(self, arg):
         if not arg.startswith("."):
-            arg = "." + arg
+            arg = f".{arg}"
         return self.path.ext == arg
 
     def basename(self, arg):
@@ -87,21 +87,18 @@ class Checkers:
                 if getrawcode(meth).co_argcount > 1:
                     if (not meth(value)) ^ invert:
                         return False
-                else:
-                    if bool(value) ^ bool(meth()) ^ invert:
-                        return False
+                elif bool(value) ^ bool(meth()) ^ invert:
+                    return False
             except (error.ENOENT, error.ENOTDIR, error.EBUSY):
                 # EBUSY feels not entirely correct,
                 # but its kind of necessary since ENOMEDIUM
                 # is not accessible in python
                 for name in self._depend_on_existence:
-                    if name in kw:
-                        if kw.get(name):
-                            return False
-                    name = "not" + name
-                    if name in kw:
-                        if not kw.get(name):
-                            return False
+                    if name in kw and kw.get(name):
+                        return False
+                    name = f"not{name}"
+                    if name in kw and not kw.get(name):
+                        return False
         return True
 
     _statcache: Stat
@@ -160,15 +157,13 @@ class Visitor:
         )
         if not self.breadthfirst:
             for subdir in dirs:
-                for p in self.gen(subdir):
-                    yield p
+                yield from self.gen(subdir)
         for p in self.optsort(entries):
             if self.fil is None or self.fil(p):
                 yield p
         if self.breadthfirst:
             for subdir in dirs:
-                for p in self.gen(subdir):
-                    yield p
+                yield from self.gen(subdir)
 
 
 class FNMatcher:
@@ -193,7 +188,7 @@ class FNMatcher:
         else:
             name = str(path)  # path.strpath # XXX svn?
             if not os.path.isabs(pattern):
-                pattern = "*" + path.sep + pattern
+                pattern = f"*{path.sep}{pattern}"
         return fnmatch.fnmatch(name, pattern)
 
 
@@ -213,7 +208,7 @@ class Stat:
             ...
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(self._osstatresult, "st_" + name)
+        return getattr(self._osstatresult, f"st_{name}")
 
     def __init__(self, path, osstatresult):
         self.path = path
@@ -468,15 +463,11 @@ class LocalPath:
                 return str(dest)
             self2base = self.relto(base)
             reldest = dest.relto(base)
-            if self2base:
-                n = self2base.count(self.sep) + 1
-            else:
-                n = 0
+            n = self2base.count(self.sep) + 1 if self2base else 0
             lst = [os.pardir] * n
             if reldest:
                 lst.append(reldest)
-            target = dest.sep.join(lst)
-            return target
+            return dest.sep.join(lst)
         except AttributeError:
             return str(dest)
 
@@ -592,9 +583,11 @@ class LocalPath:
             other = abspath(other)
         if self == other:
             return True
-        if not hasattr(os.path, "samefile"):
-            return False
-        return error.checked_call(os.path.samefile, self.strpath, other)
+        return (
+            error.checked_call(os.path.samefile, self.strpath, other)
+            if hasattr(os.path, "samefile")
+            else False
+        )
 
     def remove(self, rec=1, ignore_errors=False):
         """Remove a file or directory (or a directory tree if rec=1).
@@ -633,10 +626,10 @@ class LocalPath:
         f = self.open("rb")
         try:
             while 1:
-                buf = f.read(chunksize)
-                if not buf:
+                if buf := f.read(chunksize):
+                    hash.update(buf)
+                else:
                     return hash.hexdigest()
-                hash.update(buf)
         finally:
             f.close()
 
@@ -669,7 +662,7 @@ class LocalPath:
                 pass
             else:
                 if ext and not ext.startswith("."):
-                    ext = "." + ext
+                    ext = f".{ext}"
             kw["basename"] = pb + ext
 
         if "dirname" in kw and not kw["dirname"]:
@@ -697,10 +690,7 @@ class LocalPath:
                     res.append(basename)
                 else:
                     i = basename.rfind(".")
-                    if i == -1:
-                        purebasename, ext = basename, ""
-                    else:
-                        purebasename, ext = basename[:i], basename[i:]
+                    purebasename, ext = (basename, "") if i == -1 else (basename[:i], basename[i:])
                     if name == "purebasename":
                         res.append(purebasename)
                     elif name == "ext":
@@ -808,9 +798,7 @@ class LocalPath:
         if isinstance(fil, str):
             if not self._patternchars.intersection(fil):
                 child = self._fastjoin(fil)
-                if exists(child.strpath):
-                    return [child]
-                return []
+                return [child] if exists(child.strpath) else []
             fil = FNMatcher(fil)
         names = error.checked_call(os.listdir, self.strpath)
         res = []
@@ -914,12 +902,12 @@ class LocalPath:
         if "b" in mode:
             if not isinstance(data, bytes):
                 raise ValueError("can only process bytes")
-        else:
-            if not isinstance(data, str):
-                if not isinstance(data, bytes):
-                    data = str(data)
-                else:
-                    data = data.decode(sys.getdefaultencoding())
+        elif not isinstance(data, str):
+            data = (
+                data.decode(sys.getdefaultencoding())
+                if isinstance(data, bytes)
+                else str(data)
+            )
         f = self.open(mode)
         try:
             f.write(data)
@@ -950,11 +938,10 @@ class LocalPath:
         p = self.join(*args)
         if kwargs.get("dir", 0):
             return p._ensuredirs()
-        else:
-            p.dirpath()._ensuredirs()
-            if not p.check(file=1):
-                p.open("w").close()
-            return p
+        p.dirpath()._ensuredirs()
+        if not p.check(file=1):
+            p.open("w").close()
+        return p
 
     @overload
     def stat(self, raising: Literal[True] = ...) -> Stat:
@@ -1063,9 +1050,8 @@ class LocalPath:
             if ensuremode == "append":
                 if s not in sys.path:
                     sys.path.append(s)
-            else:
-                if s != sys.path[0]:
-                    sys.path.insert(0, s)
+            elif s != sys.path[0]:
+                sys.path.insert(0, s)
 
     def pyimport(self, modname=None, ensuresyspath=True):
         """Return path as an imported python module.
@@ -1127,10 +1113,12 @@ class LocalPath:
             if modfile[-4:] in (".pyc", ".pyo"):
                 modfile = modfile[:-1]
             elif modfile.endswith("$py.class"):
-                modfile = modfile[:-9] + ".py"
-            if modfile.endswith(os.sep + "__init__.py"):
-                if self.basename != "__init__.py":
-                    modfile = modfile[:-12]
+                modfile = f"{modfile[:-9]}.py"
+            if (
+                modfile.endswith(f"{os.sep}__init__.py")
+                and self.basename != "__init__.py"
+            ):
+                modfile = modfile[:-12]
             try:
                 issame = self.samefile(modfile)
             except error.ENOENT:
@@ -1229,9 +1217,8 @@ class LocalPath:
                     p = local(x).join(name, abs=True) + addext
                     try:
                         if p.check(file=1):
-                            if checker:
-                                if not checker(p):
-                                    continue
+                            if checker and not checker(p):
+                                continue
                             return p
                     except error.EACCES:
                         pass
@@ -1274,7 +1261,7 @@ class LocalPath:
     @classmethod
     def make_numbered_dir(
         cls, prefix="session-", rootdir=None, keep=3, lock_timeout=172800
-    ):  # two days
+    ):    # two days
         """Return unique directory with a number greater than the current
         maximum one.  The number is assumed to start directly after prefix.
         if keep is true directories with a number less than (maxnum-keep)
@@ -1365,7 +1352,7 @@ class LocalPath:
             except error.Error:
                 pass
 
-        garbage_prefix = prefix + "garbage-"
+        garbage_prefix = f"{prefix}garbage-"
 
         def is_garbage(path):
             """Check if path denotes directory scheduled for removal"""
@@ -1456,10 +1443,10 @@ def copychunked(src, dest):
         fdest = dest.open("wb")
         try:
             while 1:
-                buf = fsrc.read(chunksize)
-                if not buf:
+                if buf := fsrc.read(chunksize):
+                    fdest.write(buf)
+                else:
                     break
-                fdest.write(buf)
         finally:
             fdest.close()
     finally:
